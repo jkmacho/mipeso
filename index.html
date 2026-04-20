@@ -616,6 +616,15 @@
       color: #8a8a8e;
       font-size: 13px;
     }
+    
+    .progress-divider {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e8e8ea;
+    }
+    body.dark-mode .progress-divider {
+      border-top-color: #424245;
+    }
   </style>
 </head>
 <body>
@@ -691,6 +700,13 @@
         <input type="date" id="startDateInput" oninput="savePreferences()" />
       </div>
       <div class="metric-label-big" id="startInfo" style="margin-top: 8px; text-align: left;">—</div>
+      <div class="progress-divider">
+        <div class="metric-label-big">Progreso</div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <div class="metric-big-value" id="progressValue">—</div>
+          <div class="metric-label-big" id="progressSub" style="margin-bottom: 0; font-size: 11px;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Gráfico -->
@@ -1115,6 +1131,31 @@ function render() {
 
   if (refEntry) {
     document.getElementById('startInfo').textContent = 'Desde ' + formatDate(refEntry.date) + ' (' + formatDecimal(refEntry.weight) + ' kg)';
+  }
+
+  // Progreso desde referencia
+  if (refEntry && lastEntry) {
+    let baseWeight = refEntry.weight;
+    // Si el día de referencia no tiene entrada exacta, usar media de esa semana
+    const exactRefEntry = entries.find(e => e.date === startDate);
+    if (!exactRefEntry) {
+      const refWeek = getMondayOf(refEntry.date);
+      const refWeekEntries = entries.filter(e => {
+        const entryWeek = getMondayOf(e.date);
+        return entryWeek === refWeek;
+      });
+      if (refWeekEntries.length > 0) {
+        baseWeight = avg(refWeekEntries);
+      }
+    }
+    
+    const progressDiff = lastEntry.weight - baseWeight;
+    document.getElementById('progressValue').textContent = (progressDiff >= 0 ? '+' : '') + formatDecimal(progressDiff);
+    document.getElementById('progressValue').className = 'metric-big-value ' + (Math.abs(progressDiff) > 0.05 ? (progressDiff > 0 ? 'up' : 'down') : '');
+    document.getElementById('progressSub').textContent = 'desde referencia';
+  } else {
+    document.getElementById('progressValue').textContent = '—';
+    document.getElementById('progressSub').textContent = '';
   }
 
   if (refEntry && lastEntry && refEntry.date !== lastEntry.date) {
