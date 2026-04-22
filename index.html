@@ -625,6 +625,12 @@
     body.dark-mode .progress-divider {
       border-top-color: #424245;
     }
+    
+    .imc-small {
+      font-size: 10px;
+      color: #8a8a8e;
+      margin-left: 4px;
+    }
   </style>
 </head>
 <body>
@@ -648,6 +654,7 @@
           <input type="file" id="csvFile" accept=".csv" onchange="importCSV()" />
         </div>
         <button onclick="exportCSV(); closeMenu();">Exportar CSV</button>
+        <button onclick="editHeight(); closeMenu();">Editar altura</button>
         <button onclick="confirmarLimpiarDatos(); closeMenu();">Limpiar datos</button>
       </div>
     </div>
@@ -794,7 +801,6 @@ function loadData() {
   const saved = localStorage.getItem('weightEntries');
   const savedStartDate = localStorage.getItem('startDate');
   const savedChartMode = localStorage.getItem('chartMode');
-  const savedDarkMode = localStorage.getItem('darkMode');
   
   if (saved) {
     try {
@@ -816,6 +822,33 @@ function loadData() {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelector(`[onclick="setChartMode('${chartMode}')"]`)?.classList.add('active');
   }, 0);
+}
+
+function editHeight() {
+  const currentHeight = localStorage.getItem('height') || '';
+  const newHeight = prompt('Introduce tu altura en metros (ej: 1.75):', currentHeight);
+  if (newHeight && newHeight.trim()) {
+    const height = parseFloat(newHeight);
+    if (!isNaN(height) && height > 0.5 && height < 3) {
+      localStorage.setItem('height', height);
+      updateIMC();
+      render();
+      showAlert('Altura actualizada', 'success');
+    } else {
+      showAlert('Altura inválida (entre 0.5 y 3 metros)', 'error');
+    }
+  }
+}
+
+function updateIMC() {
+  // updateIMC se llama desde varios lugares pero ya no necesita actualizar el DOM
+  // El IMC se muestra directamente en el historial
+}
+
+function calcIMCForWeight(weight) {
+  const height = parseFloat(localStorage.getItem('height') || 0);
+  if (!height || height <= 0) return null;
+  return weight / (height * height);
 }
 
 function saveData() {
@@ -883,6 +916,7 @@ function importCSV() {
       saveData();
       resetPagination();
       render();
+      updateIMC();
       showAlert(`Importados ${imported} registros`, 'success');
       document.getElementById('csvFile').value = '';
     } catch (err) {
@@ -922,6 +956,7 @@ function limpiarDatos() {
   saveData();
   resetPagination();
   render();
+  updateIMC();
   showAlert('✓ Todos los datos han sido eliminados', 'success');
 }
 
@@ -945,6 +980,7 @@ function addEntry() {
   document.getElementById('dateInput').value = todayStr();
   resetPagination();
   render();
+  updateIMC();
   showAlert('✓ Guardado', 'success');
 }
 
@@ -954,6 +990,7 @@ function delEntry(date) {
   saveData();
   resetPagination();
   render();
+  updateIMC();
   showAlert('Eliminado', 'success');
 }
 
@@ -1129,17 +1166,52 @@ function render() {
     refEntry = entries[0];
   }
 
-  if (refEntry) {
-    document.getElementById('startInfo').textContent = 'Desde ' + formatDate(refEntry.date) + ' (' + formatDecimal(refEntry.weight) + ' kg)';
+  if (startDate) {
+    const refDate = startDate;
+    let refWeight = null;
+    let refDateDisplay = formatDate(refDate);
+    
+    // Buscar entrada exacta en la fecha de referencia
+    const exactRefEntry = entries.find(e => e.date === refDate);
+    if (exactRefEntry) {
+      refWeight = exactRefEntry.weight;
+    } else {
+      // Si no hay entrada exacta, usar media de la semana de referencia
+      const refWeek = getMondayOf(refDate);
+      const refWeekEntries = entries.filter(e => {
+        const entryWeek = getMondayOf(e.date);
+        return entryWeek === refWeek;
+      });
+      if (refWeekEntries.length > 0) {
+        refWeight = avg(refWeekEntries);
+        // Si usamos media, mostrar la fecha del primer registro de esa semana
+        if (refWeekEntries.length > 0) {
+          refDateDisplay = formatDate(refWeekEntries[0].date);
+        }
+      }
+    }
+    
+    if (refWeight !== null) {
+      document.getElementById('startInfo').textContent = 'Desde ' + refDateDisplay + ' (' + formatDecimal(refWeight) + ' kg)';
+    } else {
+      document.getElementById('startInfo').textContent = '—';
+    }
+  } else {
+    document.getElementById('startInfo').textContent = '—';
   }
 
   // Progreso desde referencia
-  if (refEntry && lastEntry) {
-    let baseWeight = refEntry.weight;
-    // Si el día de referencia no tiene entrada exacta, usar media de esa semana
-    const exactRefEntry = entries.find(e => e.date === startDate);
-    if (!exactRefEntry) {
-      const refWeek = getMondayOf(refEntry.date);
+  if (startDate && lastEntry) {
+    const refDate = startDate;
+    let baseWeight = null;
+    
+    // Buscar entrada exacta en la fecha de referencia
+    const exactRefEntry = entries.find(e => e.date === refDate);
+    if (exactRefEntry) {
+      baseWeight = exactRefEntry.weight;
+    } else {
+      // Si no hay entrada exacta, usar media de la semana de referencia
+      const refWeek = getMondayOf(refDate);
       const refWeekEntries = entries.filter(e => {
         const entryWeek = getMondayOf(e.date);
         return entryWeek === refWeek;
@@ -1149,10 +1221,15 @@ function render() {
       }
     }
     
-    const progressDiff = lastEntry.weight - baseWeight;
-    document.getElementById('progressValue').textContent = (progressDiff >= 0 ? '+' : '') + formatDecimal(progressDiff);
-    document.getElementById('progressValue').className = 'metric-big-value ' + (Math.abs(progressDiff) > 0.05 ? (progressDiff > 0 ? 'up' : 'down') : '');
-    document.getElementById('progressSub').textContent = 'desde referencia';
+    if (baseWeight !== null) {
+      const progressDiff = lastEntry.weight - baseWeight;
+      document.getElementById('progressValue').textContent = (progressDiff >= 0 ? '+' : '') + formatDecimal(progressDiff);
+      document.getElementById('progressValue').className = 'metric-big-value ' + (Math.abs(progressDiff) > 0.05 ? (progressDiff > 0 ? 'up' : 'down') : '');
+      document.getElementById('progressSub').textContent = 'desde referencia';
+    } else {
+      document.getElementById('progressValue').textContent = '—';
+      document.getElementById('progressSub').textContent = '';
+    }
   } else {
     document.getElementById('progressValue').textContent = '—';
     document.getElementById('progressSub').textContent = '';
@@ -1280,6 +1357,7 @@ function render() {
             <span>${dayNames[i]} ${formatDate(ds)}</span>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="${colorClass}">${entry ? formatDecimal(entry.weight) + ' kg' : '—'}</span>
+              ${entry && calcIMCForWeight(entry.weight) ? '<span class="imc-small">(' + formatDecimal(calcIMCForWeight(entry.weight)) + ')</span>' : ''}
               ${entry ? '<button class="del-btn" onclick="delEntry(\'' + entry.date + '\')">×</button>' : ''}
             </div>
           </div>
@@ -1296,6 +1374,9 @@ function render() {
   // Actualizar tab activo
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelector(`[onclick="setChartMode('${chartMode}')"]`)?.classList.add('active');
+  
+  // Actualizar IMC
+  updateIMC();
 }
 
 document.getElementById('dateInput').value = todayStr();
