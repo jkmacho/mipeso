@@ -674,6 +674,7 @@
         <div class="metric-big-label">Último</div>
         <div class="metric-big-value" id="bigM2">—</div>
         <div class="metric-big-sub" id="bigM2sub"></div>
+        <div style="font-size: 10px; color: #8a8a8e; margin-top: 4px;">IMC: <span id="bigM2imc">—</span></div>
       </div>
       <div class="metric-big-card">
         <div class="metric-big-label">Mínimo</div>
@@ -831,7 +832,6 @@ function editHeight() {
     const height = parseFloat(newHeight);
     if (!isNaN(height) && height > 0.5 && height < 3) {
       localStorage.setItem('height', height);
-      updateIMC();
       render();
       showAlert('Altura actualizada', 'success');
     } else {
@@ -841,8 +841,16 @@ function editHeight() {
 }
 
 function updateIMC() {
-  // updateIMC se llama desde varios lugares pero ya no necesita actualizar el DOM
-  // El IMC se muestra directamente en el historial
+  const lastEntry = entries.length ? entries[entries.length - 1] : null;
+  const height = parseFloat(localStorage.getItem('height') || 0);
+  
+  if (!lastEntry || !height || height <= 0) {
+    document.getElementById('bigM2imc').textContent = '—';
+    return;
+  }
+  
+  const imc = lastEntry.weight / (height * height);
+  document.getElementById('bigM2imc').textContent = formatDecimal(imc);
 }
 
 function calcIMCForWeight(weight) {
@@ -916,7 +924,6 @@ function importCSV() {
       saveData();
       resetPagination();
       render();
-      updateIMC();
       showAlert(`Importados ${imported} registros`, 'success');
       document.getElementById('csvFile').value = '';
     } catch (err) {
@@ -956,7 +963,6 @@ function limpiarDatos() {
   saveData();
   resetPagination();
   render();
-  updateIMC();
   showAlert('✓ Todos los datos han sido eliminados', 'success');
 }
 
@@ -980,7 +986,6 @@ function addEntry() {
   document.getElementById('dateInput').value = todayStr();
   resetPagination();
   render();
-  updateIMC();
   showAlert('✓ Guardado', 'success');
 }
 
@@ -990,7 +995,6 @@ function delEntry(date) {
   saveData();
   resetPagination();
   render();
-  updateIMC();
   showAlert('Eliminado', 'success');
 }
 
@@ -1139,7 +1143,8 @@ function render() {
   document.getElementById('bigM1').textContent = thisWeekAvg !== null ? formatDecimal(thisWeekAvg) : '—';
   
   document.getElementById('bigM2').textContent = lastEntry ? formatDecimal(lastEntry.weight) : '—';
-  document.getElementById('bigM2sub').textContent = lastEntry ? formatDate(lastEntry.date) : '';
+  const imcLast = lastEntry ? calcIMCForWeight(lastEntry.weight) : null;
+  document.getElementById('bigM2sub').textContent = lastEntry ? formatDate(lastEntry.date) + (imcLast ? ' • ' + formatDecimal(imcLast) : '') : '';
   // Color al último peso
   if (lastEntry && lastWeekAvg !== null) {
     const diff = lastEntry.weight - lastWeekAvg;
@@ -1147,7 +1152,11 @@ function render() {
   }
   
   document.getElementById('bigM3').textContent = minEntry ? formatDecimal(minEntry.weight) : '—';
-  document.getElementById('bigM3sub').textContent = minEntry ? formatDate(minEntry.date) : '';
+  const imcMin = minEntry ? calcIMCForWeight(minEntry.weight) : null;
+  document.getElementById('bigM3sub').textContent = minEntry ? formatDate(minEntry.date) + (imcMin ? ' • ' + formatDecimal(imcMin) : '') : '';
+  
+  // Actualizar IMC
+  updateIMC();
   
   // vs anterior
   if (thisWeekAvg !== null && lastWeekAvg !== null) {
@@ -1166,70 +1175,18 @@ function render() {
     refEntry = entries[0];
   }
 
-  if (startDate) {
-    const refDate = startDate;
-    let refWeight = null;
-    let refDateDisplay = formatDate(refDate);
-    
-    // Buscar entrada exacta en la fecha de referencia
-    const exactRefEntry = entries.find(e => e.date === refDate);
-    if (exactRefEntry) {
-      refWeight = exactRefEntry.weight;
-    } else {
-      // Si no hay entrada exacta, usar media de la semana de referencia
-      const refWeek = getMondayOf(refDate);
-      const refWeekEntries = entries.filter(e => {
-        const entryWeek = getMondayOf(e.date);
-        return entryWeek === refWeek;
-      });
-      if (refWeekEntries.length > 0) {
-        refWeight = avg(refWeekEntries);
-        // Si usamos media, mostrar la fecha del primer registro de esa semana
-        if (refWeekEntries.length > 0) {
-          refDateDisplay = formatDate(refWeekEntries[0].date);
-        }
-      }
-    }
-    
-    if (refWeight !== null) {
-      document.getElementById('startInfo').textContent = 'Desde ' + refDateDisplay + ' (' + formatDecimal(refWeight) + ' kg)';
-    } else {
-      document.getElementById('startInfo').textContent = '—';
-    }
+  if (refEntry) {
+    document.getElementById('startInfo').textContent = 'Desde ' + formatDate(refEntry.date) + ' (' + formatDecimal(refEntry.weight) + ' kg)';
   } else {
     document.getElementById('startInfo').textContent = '—';
   }
 
   // Progreso desde referencia
-  if (startDate && lastEntry) {
-    const refDate = startDate;
-    let baseWeight = null;
-    
-    // Buscar entrada exacta en la fecha de referencia
-    const exactRefEntry = entries.find(e => e.date === refDate);
-    if (exactRefEntry) {
-      baseWeight = exactRefEntry.weight;
-    } else {
-      // Si no hay entrada exacta, usar media de la semana de referencia
-      const refWeek = getMondayOf(refDate);
-      const refWeekEntries = entries.filter(e => {
-        const entryWeek = getMondayOf(e.date);
-        return entryWeek === refWeek;
-      });
-      if (refWeekEntries.length > 0) {
-        baseWeight = avg(refWeekEntries);
-      }
-    }
-    
-    if (baseWeight !== null) {
-      const progressDiff = lastEntry.weight - baseWeight;
-      document.getElementById('progressValue').textContent = (progressDiff >= 0 ? '+' : '') + formatDecimal(progressDiff);
-      document.getElementById('progressValue').className = 'metric-big-value ' + (Math.abs(progressDiff) > 0.05 ? (progressDiff > 0 ? 'up' : 'down') : '');
-      document.getElementById('progressSub').textContent = 'desde referencia';
-    } else {
-      document.getElementById('progressValue').textContent = '—';
-      document.getElementById('progressSub').textContent = '';
-    }
+  if (refEntry && lastEntry) {
+    const progressDiff = lastEntry.weight - refEntry.weight;
+    document.getElementById('progressValue').textContent = (progressDiff >= 0 ? '+' : '') + formatDecimal(progressDiff);
+    document.getElementById('progressValue').className = 'metric-big-value ' + (Math.abs(progressDiff) > 0.05 ? (progressDiff > 0 ? 'up' : 'down') : '');
+    document.getElementById('progressSub').textContent = 'desde referencia';
   } else {
     document.getElementById('progressValue').textContent = '—';
     document.getElementById('progressSub').textContent = '';
@@ -1374,9 +1331,6 @@ function render() {
   // Actualizar tab activo
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelector(`[onclick="setChartMode('${chartMode}')"]`)?.classList.add('active');
-  
-  // Actualizar IMC
-  updateIMC();
 }
 
 document.getElementById('dateInput').value = todayStr();
