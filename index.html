@@ -935,21 +935,31 @@ function importCSV() {
 
 function exportCSV() {
   if (entries.length === 0) {
-    showAlert('Sin datos', 'error');
+    if (typeof showAlert === 'function') showAlert('Sin datos', 'error');
+    else alert('Sin datos para exportar');
     return;
   }
-  let csv = 'fecha,peso\n';
-  entries.forEach(e => {
-    csv += `${convertFechaToDDMMYYYY(e.date)},${formatDecimal(e.weight)}\n`;
+  
+  // Cabecera que tu importador saltará por ser NaN
+  let csv = "date,weight\n"; 
+  
+  // Ordenamos para que el CSV sea legible cronológicamente
+  const sortedEntries = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  
+  sortedEntries.forEach(e => {
+    // Usamos el formato YYYY-MM-DD y punto decimal
+    csv += `${e.date},${e.weight}\n`;
   });
+  
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `peso-${todayStr()}.csv`;
+  a.download = `export_peso_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   window.URL.revokeObjectURL(url);
-  showAlert('CSV exportado', 'success');
 }
 
 function confirmarLimpiarDatos() {
