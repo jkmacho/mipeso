@@ -888,75 +888,49 @@ function convertFechaToDDMMYYYY(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
-function exportCSV() {
-if (entries.length === 0) {
-    showAlert('Sin datos para exportar', 'error');
-    return;
-  }
-  // Usamos punto y coma para máxima compatibilidad con Excel en español
-  let csv = 'fecha;peso;nota\n'; 
-  entries.forEach(e => {
-    csv += `${convertFechaToDDMMYYYY(e.date)};${e.weight.toString().replace('.', ',')};${e.note || ''}\n`;
-  });
-  
-  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `mi-peso-${todayStr()}.csv`;
-  a.click();
-  showAlert('CSV exportado (compatible con Excel)', 'success');
-}
-
-// --- FUNCIÓN DE IMPORTACIÓN REFORZADA ---
 function importCSV() {
-    const file = document.getElementById('csvFile').files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    
-    reader.onload = function(e) {
-      try {
-        const text = e.target.result;
-        const lines = text.split(/\r?\n/);
-        let imported = 0;
-        
-        lines.forEach((line, index) => {
-          if (index === 0 || !line.trim()) return; // Saltar cabecera y líneas vacías
-  
-          // Detecta si es coma o punto y coma automáticamente
-          const separator = line.includes(';') ? ';' : ',';
-          const parts = line.split(separator).map(p => p.trim());
-          
-          if (parts.length < 2) return;
-  
-          let fechaStr = parts[0];
-          // Limpiamos el peso: cambiamos coma por punto para que JS lo entienda
-          let pesoStr = parts[1].replace(',', '.').replace(/"/g, '');
-          let nota = parts[2] || '';
-  
-          let date = fechaStr.includes('/') ? convertFechaToISO(fechaStr) : fechaStr;
-          const peso = parseFloat(pesoStr);
-  
-          if (date && !isNaN(peso)) {
-            // IMPORTANTE: Si ya existe la fecha, la actualizamos (pisamos el dato anterior)
-            entries = entries.filter(e => e.date !== date); 
-            entries.push({ date, weight: peso, note: nota });
-            imported++;
-          }
-        });
-        
-        entries.sort((a, b) => a.date.localeCompare(b.date));
-        saveData();
-        render();
-        showAlert(`✅ Éxito: ${imported} registros procesados`, 'success');
-        document.getElementById('csvFile').value = '';
-      } catch (err) {
-        console.error(err);
-        showAlert('Error al procesar el archivo', 'error');
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text = e.target.result;
+      const lines = text.trim().split('\n');
+      let imported = 0;
+      const newEntries = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length < 2) continue;
+        const fechaStr = parts[0];
+        const pesoStr = parts[1];
+        let date = fechaStr.includes('/') ? convertFechaToISO(fechaStr) : fechaStr;
+        const peso = parseFloat(pesoStr);
+        if (!date || isNaN(peso)) continue;
+        newEntries.push({ date, weight: peso });
+        imported++;
       }
-    };
-    reader.readAsText(file);
-  }
+      
+      const existingDates = new Set(entries.map(e => e.date));
+      newEntries.forEach(ne => {
+        if (!existingDates.has(ne.date)) {
+          entries.push(ne);
+        }
+      });
+      
+      entries.sort((a, b) => a.date.localeCompare(b.date));
+      saveData();
+      resetPagination();
+      render();
+      showAlert(`Importados ${imported} registros`, 'success');
+      document.getElementById('csvFile').value = '';
+    } catch (err) {
+      showAlert('Error al importar', 'error');
+    }
+  };
+  reader.readAsText(file);
 }
 
 function exportCSV() {
