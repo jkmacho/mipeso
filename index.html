@@ -651,7 +651,7 @@
           <button onclick="document.getElementById('csvFile').click(); closeMenu();">
             Importar CSV
           </button>
-          <input type="file" id="csvFile" accept=".csv" onchange="importCSV()" />
+          <input type="file" id="csvFile" accept=".csv,text/csv,text/plain,*/*" onchange="importCSV()" />
         </div>
         <button onclick="exportCSV(); closeMenu();">Exportar CSV</button>
         <button onclick="editHeight(); closeMenu();">Editar altura</button>
