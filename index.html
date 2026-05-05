@@ -907,6 +907,7 @@ function importCSV() {
         const fechaStr = parts[0];
         const pesoStr = parts[1];
         let date = fechaStr.includes('/') ? convertFechaToISO(fechaStr) : fechaStr;
+        date = date.slice(0, 10);
         const peso = parseFloat(pesoStr);
         if (!date || isNaN(peso)) continue;
         newEntries.push({ date, weight: peso });
